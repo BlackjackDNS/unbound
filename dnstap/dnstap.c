@@ -45,7 +45,7 @@
 #include "util/netevent.h"
 #include "util/log.h"
 
-#include <fstrm.h>
+// #include <fstrm.h>
 #include <protobuf-c/protobuf-c.h>
 
 #include "dnstap/dnstap.h"
@@ -86,13 +86,13 @@ dt_pack(const Dnstap__Dnstap *d, void **buf, size_t *sz)
 static void
 dt_send(const struct dt_env *env, void *buf, size_t len_buf)
 {
-	fstrm_res res;
-	if (!buf)
-		return;
-	res = fstrm_iothr_submit(env->iothr, env->ioq, buf, len_buf,
-				 fstrm_free_wrapper, NULL);
-	if (res != fstrm_res_success)
-		free(buf);
+	// fstrm_res res;
+	// if (!buf)
+	// 	return;
+	// res = fstrm_iothr_submit(env->iothr, env->ioq, buf, len_buf,
+	// 			 fstrm_free_wrapper, NULL);
+	// if (res != fstrm_res_success)
+	// 	free(buf);
 }
 
 static void
@@ -121,12 +121,12 @@ dt_msg_init(const struct dt_env *env,
 struct dt_env *
 dt_create(const char *socket_path, unsigned num_workers)
 {
-	fstrm_res res;
+	// fstrm_res res;
 	struct dt_env *env;
-	struct fstrm_iothr_options *fopt;
-	struct fstrm_unix_writer_options *fuwopt;
-	struct fstrm_writer *fw;
-	struct fstrm_writer_options *fwopt;
+	// struct fstrm_iothr_options *fopt;
+	// struct fstrm_unix_writer_options *fuwopt;
+	// struct fstrm_writer *fw;
+	// struct fstrm_writer_options *fwopt;
 
 	verbose(VERB_OPS, "opening dnstap socket %s", socket_path);
 	log_assert(socket_path != NULL);
@@ -136,29 +136,29 @@ dt_create(const char *socket_path, unsigned num_workers)
 	if (!env)
 		return NULL;
 
-	fwopt = fstrm_writer_options_init();
-	res = fstrm_writer_options_add_content_type(fwopt,
-		DNSTAP_CONTENT_TYPE, sizeof(DNSTAP_CONTENT_TYPE) - 1);
-	log_assert(res == fstrm_res_success);
-
-	fuwopt = fstrm_unix_writer_options_init();
-	fstrm_unix_writer_options_set_socket_path(fuwopt, socket_path);
-
-	fw = fstrm_unix_writer_init(fuwopt, fwopt);
-	log_assert(fw != NULL);
-
-	fopt = fstrm_iothr_options_init();
-	fstrm_iothr_options_set_num_input_queues(fopt, num_workers);
-	env->iothr = fstrm_iothr_init(fopt, &fw);
-	if (env->iothr == NULL) {
-		verbose(VERB_DETAIL, "dt_create: fstrm_iothr_init() failed");
-		fstrm_writer_destroy(&fw);
-		free(env);
-		env = NULL;
-	}
-	fstrm_iothr_options_destroy(&fopt);
-	fstrm_unix_writer_options_destroy(&fuwopt);
-	fstrm_writer_options_destroy(&fwopt);
+	// fwopt = fstrm_writer_options_init();
+	// res = fstrm_writer_options_add_content_type(fwopt,
+	// 	DNSTAP_CONTENT_TYPE, sizeof(DNSTAP_CONTENT_TYPE) - 1);
+	// log_assert(res == fstrm_res_success);
+	//
+	// fuwopt = fstrm_unix_writer_options_init();
+	// fstrm_unix_writer_options_set_socket_path(fuwopt, socket_path);
+	//
+	// fw = fstrm_unix_writer_init(fuwopt, fwopt);
+	// log_assert(fw != NULL);
+	//
+	// fopt = fstrm_iothr_options_init();
+	// fstrm_iothr_options_set_num_input_queues(fopt, num_workers);
+	// env->iothr = fstrm_iothr_init(fopt, &fw);
+	// if (env->iothr == NULL) {
+	// 	verbose(VERB_DETAIL, "dt_create: fstrm_iothr_init() failed");
+	// 	fstrm_writer_destroy(&fw);
+	// 	free(env);
+	// 	env = NULL;
+	// }
+	// fstrm_iothr_options_destroy(&fopt);
+	// fstrm_unix_writer_options_destroy(&fuwopt);
+	// fstrm_writer_options_destroy(&fwopt);
 
 	return env;
 }
@@ -247,9 +247,9 @@ dt_apply_cfg(struct dt_env *env, struct config_file *cfg)
 int
 dt_init(struct dt_env *env)
 {
-	env->ioq = fstrm_iothr_get_input_queue(env->iothr);
-	if (env->ioq == NULL)
-		return 0;
+	// env->ioq = fstrm_iothr_get_input_queue(env->iothr);
+	// if (env->ioq == NULL)
+	// 	return 0;
 	return 1;
 }
 
@@ -259,7 +259,7 @@ dt_delete(struct dt_env *env)
 	if (!env)
 		return;
 	verbose(VERB_OPS, "closing dnstap socket");
-	fstrm_iothr_destroy(&env->iothr);
+	// fstrm_iothr_destroy(&env->iothr);
 	free(env->identity);
 	free(env->version);
 	free(env);
