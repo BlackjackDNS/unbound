@@ -100,7 +100,7 @@ esac
 
 # are we on MinGW?
 if uname -s 2>&1 | grep MINGW32 >/dev/null; then on_mingw="yes"
-else 
+else
 	if echo $target | grep mingw32 >/dev/null; then on_mingw="yes"
 	else on_mingw="no"; fi
 fi
@@ -114,7 +114,7 @@ else
   ub_conf_file="C:\\Program Files\\Unbound\\service.conf"
 fi
 AC_ARG_WITH([conf_file],
-        AC_HELP_STRING([--with-conf-file=path], 
+        AC_HELP_STRING([--with-conf-file=path],
 	[Pathname to the Unbound configuration file]),
 	[ub_conf_file="$withval"])
 AC_SUBST(ub_conf_file)
@@ -124,10 +124,10 @@ ub_conf_dir=`AS_DIRNAME(["$ub_conf_file"])`
 AC_SUBST(ub_conf_dir)
 
 # Determine run, chroot directory and pidfile locations
-AC_ARG_WITH(run-dir, 
-    AC_HELP_STRING([--with-run-dir=path], 
-    [set default directory to chdir to (by default dir part of cfg file)]), 
-    UNBOUND_RUN_DIR="$withval", 
+AC_ARG_WITH(run-dir,
+    AC_HELP_STRING([--with-run-dir=path],
+    [set default directory to chdir to (by default dir part of cfg file)]),
+    UNBOUND_RUN_DIR="$withval",
 if test $on_mingw = no; then
     UNBOUND_RUN_DIR=`dirname "$ub_conf_file"`
 else
@@ -138,10 +138,10 @@ AC_SUBST(UNBOUND_RUN_DIR)
 ACX_ESCAPE_BACKSLASH($UNBOUND_RUN_DIR, hdr_run)
 AC_DEFINE_UNQUOTED(RUN_DIR, ["$hdr_run"], [Directory to chdir to])
 
-AC_ARG_WITH(chroot-dir, 
-    AC_HELP_STRING([--with-chroot-dir=path], 
-    [set default directory to chroot to (by default same as run-dir)]), 
-    UNBOUND_CHROOT_DIR="$withval", 
+AC_ARG_WITH(chroot-dir,
+    AC_HELP_STRING([--with-chroot-dir=path],
+    [set default directory to chroot to (by default same as run-dir)]),
+    UNBOUND_CHROOT_DIR="$withval",
 if test $on_mingw = no; then
     UNBOUND_CHROOT_DIR="$UNBOUND_RUN_DIR"
 else
@@ -160,10 +160,10 @@ AC_ARG_WITH(share-dir,
 AC_SUBST(UNBOUND_SHARE_DIR)
 AC_DEFINE_UNQUOTED(SHARE_DIR, ["$UNBOUND_SHARE_DIR"], [Shared data])
 
-AC_ARG_WITH(pidfile, 
-    AC_HELP_STRING([--with-pidfile=filename], 
-    [set default pathname to unbound pidfile (default run-dir/unbound.pid)]), 
-    UNBOUND_PIDFILE="$withval", 
+AC_ARG_WITH(pidfile,
+    AC_HELP_STRING([--with-pidfile=filename],
+    [set default pathname to unbound pidfile (default run-dir/unbound.pid)]),
+    UNBOUND_PIDFILE="$withval",
 if test $on_mingw = no; then
     UNBOUND_PIDFILE="$UNBOUND_RUN_DIR/unbound.pid"
 else
@@ -174,10 +174,10 @@ AC_SUBST(UNBOUND_PIDFILE)
 ACX_ESCAPE_BACKSLASH($UNBOUND_PIDFILE, hdr_pid)
 AC_DEFINE_UNQUOTED(PIDFILE, ["$hdr_pid"], [default pidfile location])
 
-AC_ARG_WITH(rootkey-file, 
-    AC_HELP_STRING([--with-rootkey-file=filename], 
-    [set default pathname to root key file (default run-dir/root.key). This file is read and written.]), 
-    UNBOUND_ROOTKEY_FILE="$withval", 
+AC_ARG_WITH(rootkey-file,
+    AC_HELP_STRING([--with-rootkey-file=filename],
+    [set default pathname to root key file (default run-dir/root.key). This file is read and written.]),
+    UNBOUND_ROOTKEY_FILE="$withval",
 if test $on_mingw = no; then
     UNBOUND_ROOTKEY_FILE="$UNBOUND_RUN_DIR/root.key"
 else
@@ -188,10 +188,10 @@ AC_SUBST(UNBOUND_ROOTKEY_FILE)
 ACX_ESCAPE_BACKSLASH($UNBOUND_ROOTKEY_FILE, hdr_rkey)
 AC_DEFINE_UNQUOTED(ROOT_ANCHOR_FILE, ["$hdr_rkey"], [default rootkey location])
 
-AC_ARG_WITH(rootcert-file, 
-    AC_HELP_STRING([--with-rootcert-file=filename], 
-    [set default pathname to root update certificate file (default run-dir/icannbundle.pem).  This file need not exist if you are content with the builtin.]), 
-    UNBOUND_ROOTCERT_FILE="$withval", 
+AC_ARG_WITH(rootcert-file,
+    AC_HELP_STRING([--with-rootcert-file=filename],
+    [set default pathname to root update certificate file (default run-dir/icannbundle.pem).  This file need not exist if you are content with the builtin.]),
+    UNBOUND_ROOTCERT_FILE="$withval",
 if test $on_mingw = no; then
     UNBOUND_ROOTCERT_FILE="$UNBOUND_RUN_DIR/icannbundle.pem"
 else
@@ -202,10 +202,10 @@ AC_SUBST(UNBOUND_ROOTCERT_FILE)
 ACX_ESCAPE_BACKSLASH($UNBOUND_ROOTCERT_FILE, hdr_rpem)
 AC_DEFINE_UNQUOTED(ROOT_CERT_FILE, ["$hdr_rpem"], [default rootcert location])
 
-AC_ARG_WITH(username, 
-    AC_HELP_STRING([--with-username=user], 
-    [set default user that unbound changes to (default user is unbound)]), 
-    UNBOUND_USERNAME="$withval", 
+AC_ARG_WITH(username,
+    AC_HELP_STRING([--with-username=user],
+    [set default user that unbound changes to (default user is unbound)]),
+    UNBOUND_USERNAME="$withval",
     UNBOUND_USERNAME="unbound")
 AC_SUBST(UNBOUND_USERNAME)
 AC_DEFINE_UNQUOTED(UB_USERNAME, ["$UNBOUND_USERNAME"], [default username])
@@ -229,7 +229,7 @@ ACX_DETERMINE_EXT_FLAGS_UNBOUND
 # debug mode flags warnings
 AC_ARG_ENABLE(checking, AC_HELP_STRING([--enable-checking], [Enable warnings, asserts, makefile-dependencies]))
 AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug], [same as enable-checking]))
-if test "$enable_debug" = "yes"; then debug_enabled="$enable_debug"; 
+if test "$enable_debug" = "yes"; then debug_enabled="$enable_debug";
 else debug_enabled="$enable_checking"; fi
 AC_SUBST(debug_enabled)
 case "$debug_enabled" in
@@ -272,7 +272,7 @@ ACX_LIBTOOL_C_ONLY
 # Checks for header files.
 AC_CHECK_HEADERS([stdarg.h stdbool.h netinet/in.h sys/param.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h],,, [AC_INCLUDES_DEFAULT])
 
-# check for types.  
+# check for types.
 # Using own tests for int64* because autoconf builtin only give 32bit.
 AC_CHECK_TYPE(int8_t, signed char)
 AC_CHECK_TYPE(int16_t, short)
@@ -353,13 +353,13 @@ AC_CHECK_FUNCS([strptime],[AC_CHECK_STRPTIME_WORKS],[AC_LIBOBJ([strptime])])
 
 # set memory allocation checking if requested
 AC_ARG_ENABLE(alloc-checks, AC_HELP_STRING([--enable-alloc-checks],
-	[ enable to memory allocation statistics, for debug purposes ]), 
+	[ enable to memory allocation statistics, for debug purposes ]),
 	, )
 AC_ARG_ENABLE(alloc-lite, AC_HELP_STRING([--enable-alloc-lite],
-	[ enable for lightweight alloc assertions, for debug purposes ]), 
+	[ enable for lightweight alloc assertions, for debug purposes ]),
 	, )
 AC_ARG_ENABLE(alloc-nonregional, AC_HELP_STRING([--enable-alloc-nonregional],
-	[ enable nonregional allocs, slow but exposes regional allocations to other memory purifiers, for debug purposes ]), 
+	[ enable nonregional allocs, slow but exposes regional allocations to other memory purifiers, for debug purposes ]),
 	, )
 if test x_$enable_alloc_nonregional = x_yes; then
 	AC_DEFINE(UNBOUND_ALLOC_NONREGIONAL, 1, [use malloc not regions, for debug use])
@@ -388,7 +388,7 @@ if test "$on_mingw" = "yes"; then
 ])],
 	AC_MSG_RESULT(yes)
 	AC_DEFINE(HAVE_WINDOWS_THREADS, 1, [Using Windows threads])
-,	
+,
 	AC_MSG_RESULT(no)
 )
 
@@ -399,8 +399,8 @@ else
 # check this first, so that the pthread lib does not get linked in via
 # libssl or libpython, and thus distorts the tests, and we end up using
 # the non-threadsafe C libraries.
-AC_ARG_WITH(pthreads, AC_HELP_STRING([--with-pthreads], 
- [use pthreads library, or --without-pthreads to disable threading support.]), 
+AC_ARG_WITH(pthreads, AC_HELP_STRING([--with-pthreads],
+ [use pthreads library, or --without-pthreads to disable threading support.]),
  [ ],[ withval="yes" ])
 ub_have_pthreads=no
 if test x_$withval != x_no; then
@@ -414,8 +414,8 @@ if test x_$withval != x_no; then
 		])
 fi
 
-# check solaris thread library 
-AC_ARG_WITH(solaris-threads, AC_HELP_STRING([--with-solaris-threads], 
+# check solaris thread library
+AC_ARG_WITH(solaris-threads, AC_HELP_STRING([--with-solaris-threads],
 	[use solaris native thread library.]), [ ],[ withval="no" ])
 ub_have_sol_threads=no
 if test x_$withval != x_no; then
@@ -429,8 +429,8 @@ if test x_$withval != x_no; then
 		ACX_CHECK_COMPILER_FLAG(mt, [CFLAGS="$CFLAGS -mt"],
 			[CFLAGS="$CFLAGS -D_REENTRANT"])
 		ub_have_sol_threads=yes
-	] , [ 
-		AC_ERROR([no solaris threads found.]) 
+	] , [
+		AC_ERROR([no solaris threads found.])
 	])
 	fi
 fi
@@ -666,7 +666,7 @@ int load_gost_id(void)
 	EVP_PKEY_asn1_get0_info(&gost_id, NULL, NULL, NULL, NULL, meth);
 	return gost_id;
 }
-int main(void) { 
+int main(void) {
 	EVP_MD_CTX* ctx;
 	const EVP_MD* md;
 	unsigned char digest[64]; /* its a 256-bit digest, so uses 32 bytes */
@@ -880,7 +880,7 @@ AC_CHECK_HEADERS([expat.h],,, [AC_INCLUDES_DEFAULT])
 AC_SUBST(staticexe)
 staticexe=""
 AC_ARG_ENABLE(static-exe, AC_HELP_STRING([--enable-static-exe],
-	[ enable to compile executables statically against (event) libs, for debug purposes ]), 
+	[ enable to compile executables statically against (event) libs, for debug purposes ]),
 	, )
 if test x_$enable_static_exe = x_yes; then
 	staticexe="-static"
@@ -895,7 +895,7 @@ fi
 
 # set lock checking if requested
 AC_ARG_ENABLE(lock_checks, AC_HELP_STRING([--enable-lock-checks],
-	[ enable to check lock and unlock calls, for debug purposes ]), 
+	[ enable to check lock and unlock calls, for debug purposes ]),
 	, )
 if test x_$enable_lock_checks = x_yes; then
 	AC_DEFINE(ENABLE_LOCK_CHECKS, 1, [Define if you want to use debug lock checking (slow).])
@@ -1081,13 +1081,13 @@ dt_DNSTAP([$UNBOUND_RUN_DIR/dnstap.sock],
         AC_DEFINE([USE_DNSTAP], [1], [Define to 1 to enable dnstap support])
         AC_SUBST([ENABLE_DNSTAP], [1])
 
-        AC_SUBST([opt_dnstap_socket_path])
-        ACX_ESCAPE_BACKSLASH($opt_dnstap_socket_path, hdr_dnstap_socket_path)
-        AC_DEFINE_UNQUOTED(DNSTAP_SOCKET_PATH,
-            ["$hdr_dnstap_socket_path"], [default dnstap socket path])
+#        AC_SUBST([opt_dnstap_socket_path])
+#        ACX_ESCAPE_BACKSLASH($opt_dnstap_socket_path, hdr_dnstap_socket_path)
+#        AC_DEFINE_UNQUOTED(DNSTAP_SOCKET_PATH,
+#            ["$hdr_dnstap_socket_path"], [default dnstap socket path])
 
-        AC_SUBST([DNSTAP_SRC], ["dnstap/dnstap.c dnstap/dnstap.pb-c.c"])
-        AC_SUBST([DNSTAP_OBJ], ["dnstap.lo dnstap.pb-c.lo"])
+        AC_SUBST([DNSTAP_SRC], ["dnstap/dnstap.c dnstap/dnstap.pb-c.c pipe.c"])
+        AC_SUBST([DNSTAP_OBJ], ["dnstap.lo dnstap.pb-c.lo pipe.lo"])
     ],
     [
         AC_SUBST([ENABLE_DNSTAP], [0])
