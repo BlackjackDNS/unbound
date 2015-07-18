@@ -10,10 +10,10 @@ AC_DEFUN([dt_DNSTAP],
                    [Enable dnstap support (requires fstrm, protobuf-c)]),
     [opt_dnstap=$enableval], [opt_dnstap=no])
 
-  AC_ARG_WITH([dnstap-socket-path],
-    AS_HELP_STRING([--with-dnstap-socket-path=pathname],
-                   [set default dnstap socket path]),
-    [opt_dnstap_socket_path=$withval], [opt_dnstap_socket_path="$1"])
+#  AC_ARG_WITH([dnstap-socket-path],
+#    AS_HELP_STRING([--with-dnstap-socket-path=pathname],
+#                   [set default dnstap socket path]),
+#    [opt_dnstap_socket_path=$withval], [opt_dnstap_socket_path="$1"])
 
   if test "x$opt_dnstap" != "xno"; then
     AC_PATH_PROG([PROTOC_C], [protoc-c])
@@ -40,13 +40,6 @@ AC_DEFUN([dt_DNSTAP],
 	    fi
 	  fi
     ])
-    AC_ARG_WITH([libfstrm], AC_HELP_STRING([--with-libfstrm=path],
-    	[Path where libfstrm is installed, for dnstap]), [
-	CFLAGS="$CFLAGS -I$withval/include"
-	LDFLAGS="$LDFLAGS -L$withval/lib"
-    ])
-    AC_SEARCH_LIBS([fstrm_iothr_init], [fstrm], [],
-      AC_MSG_ERROR([The fstrm library was not found. Please install fstrm!]))
     AC_SEARCH_LIBS([protobuf_c_message_pack], [protobuf-c], [],
       AC_MSG_ERROR([The protobuf-c library was not found. Please install protobuf-c!]))
     $2

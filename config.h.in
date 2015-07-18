@@ -16,9 +16,6 @@
 /* Whether daemon is deprecated */
 #undef DEPRECATED_DAEMON
 
-/* default dnstap socket path */
-#undef DNSTAP_SOCKET_PATH
-
 /* Define if you want to use debug lock checking (slow). */
 #undef ENABLE_LOCK_CHECKS
 
