@@ -37,68 +37,63 @@
 #ifdef USE_DNSTAP
 
 #include "config.h"
+
+#include <protobuf-c/protobuf-c.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
 #include "ldns/sbuffer.h"
 #include "util/config_file.h"
 #include "util/net_help.h"
 #include "util/netevent.h"
 #include "util/log.h"
-
-// #include <fstrm.h>
-#include <protobuf-c/protobuf-c.h>
-
 #include "dnstap/dnstap.h"
-#include "dnstap/dnstap.pb-c.h"
-
-#define DNSTAP_CONTENT_TYPE		"protobuf:dnstap.Dnstap"
-#define DNSTAP_INITIAL_BUF_SIZE		256
-
-struct dt_msg {
-	void		*buf;
-	size_t		len_buf;
-	Dnstap__Dnstap	d;
-	Dnstap__Message	m;
-};
 
 static int
 dt_pack(const Dnstap__Dnstap *d, void **buf, size_t *sz)
 {
 	ProtobufCBufferSimple sbuf;
-
 	memset(&sbuf, 0, sizeof(sbuf));
+
 	sbuf.base.append = protobuf_c_buffer_simple_append;
 	sbuf.len = 0;
 	sbuf.alloced = DNSTAP_INITIAL_BUF_SIZE;
 	sbuf.data = malloc(sbuf.alloced);
-	if (sbuf.data == NULL)
-		return 0;
+
+	if (sbuf.data == NULL) return 0;
 	sbuf.must_free_data = 1;
 
 	*sz = dnstap__dnstap__pack_to_buffer(d, (ProtobufCBuffer *) &sbuf);
-	if (sbuf.data == NULL)
-		return 0;
-	*buf = sbuf.data;
+	if (sbuf.data == NULL) return 0;
 
+	*buf = sbuf.data;
 	return 1;
 }
 
 static void
-dt_send(const struct dt_env *env, void *buf, size_t len_buf)
+dt_send(const dt_env_t *env, void *buf, size_t len_buf)
 {
-	// fstrm_res res;
-	// if (!buf)
-	// 	return;
-	// res = fstrm_iothr_submit(env->iothr, env->ioq, buf, len_buf,
-	// 			 fstrm_free_wrapper, NULL);
-	// if (res != fstrm_res_success)
-	// 	free(buf);
+	verbose(VERB_OPS, "dnstap: %s (unbound@%s)", env->identity, env->version);
+
+	dt_message_t *event = dt_message_alloc(len_buf);
+	event->length = len_buf;
+	event->buffer = buf;
+	verbose(VERB_OPS, "dnstap: queueing event (length %d)", event->length);
+
+	pipe_push(env->so_producer, &event, 1);
+	verbose(VERB_OPS, "dnstap: queued event");
 }
 
 static void
-dt_msg_init(const struct dt_env *env,
-	    struct dt_msg *dm,
-	    Dnstap__Message__Type mtype)
+dt_msg_init(const dt_env_t *env,
+	dt_msg_t *dm,
+	Dnstap__Message__Type mtype)
 {
 	memset(dm, 0, sizeof(*dm));
 	dm->d.base.descriptor = &dnstap__dnstap__descriptor;
@@ -118,150 +113,156 @@ dt_msg_init(const struct dt_env *env,
 	}
 }
 
-struct dt_env *
-dt_create(const char *socket_path, unsigned num_workers)
+dt_env_t *
+dt_create(uint16_t port, uint8_t num_workers)
 {
-	// fstrm_res res;
-	struct dt_env *env;
-	// struct fstrm_iothr_options *fopt;
-	// struct fstrm_unix_writer_options *fuwopt;
-	// struct fstrm_writer *fw;
-	// struct fstrm_writer_options *fwopt;
-
-	verbose(VERB_OPS, "opening dnstap socket %s", socket_path);
-	log_assert(socket_path != NULL);
+	log_assert(port > 0);
 	log_assert(num_workers > 0);
 
-	env = (struct dt_env *) calloc(1, sizeof(struct dt_env));
-	if (!env)
-		return NULL;
+	dt_env_t *env = (dt_env_t *) malloc(sizeof(dt_env_t));
+	if (!env) return NULL;
 
-	// fwopt = fstrm_writer_options_init();
-	// res = fstrm_writer_options_add_content_type(fwopt,
-	// 	DNSTAP_CONTENT_TYPE, sizeof(DNSTAP_CONTENT_TYPE) - 1);
-	// log_assert(res == fstrm_res_success);
-	//
-	// fuwopt = fstrm_unix_writer_options_init();
-	// fstrm_unix_writer_options_set_socket_path(fuwopt, socket_path);
-	//
-	// fw = fstrm_unix_writer_init(fuwopt, fwopt);
-	// log_assert(fw != NULL);
-	//
-	// fopt = fstrm_iothr_options_init();
-	// fstrm_iothr_options_set_num_input_queues(fopt, num_workers);
-	// env->iothr = fstrm_iothr_init(fopt, &fw);
-	// if (env->iothr == NULL) {
-	// 	verbose(VERB_DETAIL, "dt_create: fstrm_iothr_init() failed");
-	// 	fstrm_writer_destroy(&fw);
-	// 	free(env);
-	// 	env = NULL;
-	// }
-	// fstrm_iothr_options_destroy(&fopt);
-	// fstrm_unix_writer_options_destroy(&fuwopt);
-	// fstrm_writer_options_destroy(&fwopt);
+	// Flags. Initial valuse are set here, and each is set again, only once,
+	// from another function, possibly in another thread; otherwise,
+	// they're only ever read.
+	env->so_connected = malloc(sizeof(uint8_t));
+	env->dt_stopping = malloc(sizeof(uint8_t));
+
+	*(env->so_connected) = 0;
+	*(env->dt_stopping) = 0;
+
+	env->so_pipe = pipe_new(sizeof(void *), 0);
+
+	// These are used in the dt_worker therad. Unbound workers
+	// create their own producers
+	env->so_consumer = pipe_consumer_new(env->so_pipe);
+	env->so_producer = pipe_producer_new(env->so_pipe);
+	pthread_create(&env->dt_worker, NULL, __dt_worker, env);
 
 	return env;
 }
 
-static void
-dt_apply_identity(struct dt_env *env, struct config_file *cfg)
-{
-	char buf[MAXHOSTNAMELEN+1];
-	if (!cfg->dnstap_send_identity)
-		return;
-	free(env->identity);
-	if (cfg->dnstap_identity == NULL || cfg->dnstap_identity[0] == 0) {
-		if (gethostname(buf, MAXHOSTNAMELEN) == 0) {
-			buf[MAXHOSTNAMELEN] = 0;
-			env->identity = strdup(buf);
+void *
+__dt_worker(void *arg) {
+	verbose(VERB_OPS, "dnstap: starting dt_worker thread");
+
+	dt_env_t *env = (dt_env_t *) arg;
+	struct sockaddr_in so_service;
+
+	so_service.sin_family = AF_INET;
+	so_service.sin_port = htons(5354);
+	so_service.sin_addr.s_addr = inet_addr("127.0.0.1");
+	memset(so_service.sin_zero, 0, sizeof so_service.sin_zero);
+
+	if(!__dt_so_connect(env, so_service)) return NULL;
+
+	// Pop events off of the queue
+	dt_message_t * event;
+
+	while(pipe_pop(env->so_consumer, &event, 1)) {
+		if(send(env->so_socket, event, dt_message_size(event), 0) < 0) {
+			verbose(VERB_OPS, "dnstap: error sending message: %s. Trying to reconnect", strerror(errno));
+
+			// Requeue the event for later
+			pipe_push(env->so_producer, &event, 1);
+
+			// And try to reconnect
+			close(env->so_socket);
+			if(!__dt_so_connect(env, so_service)) return NULL;
 		} else {
-			fatal_exit("dt_apply_identity: gethostname() failed");
+			verbose(VERB_OPS, "dnstap: sent event to dt_service");
+			dt_message_free(event);
 		}
-	} else {
-		env->identity = strdup(cfg->dnstap_identity);
 	}
-	if (env->identity == NULL)
-		fatal_exit("dt_apply_identity: strdup() failed");
-	env->len_identity = (unsigned int)strlen(env->identity);
-	verbose(VERB_OPS, "dnstap identity field set to \"%s\"",
-		env->identity);
+
+	verbose(VERB_OPS, "dnstap: stopping dt_worker thread");
+	close(env->so_socket);
+	pipe_consumer_free(env->so_consumer);
 }
 
-static void
-dt_apply_version(struct dt_env *env, struct config_file *cfg)
-{
-	if (!cfg->dnstap_send_version)
-		return;
-	free(env->version);
-	if (cfg->dnstap_version == NULL || cfg->dnstap_version[0] == 0)
-		env->version = strdup(PACKAGE_STRING);
-	else
-		env->version = strdup(cfg->dnstap_version);
-	if (env->version == NULL)
-		fatal_exit("dt_apply_version: strdup() failed");
-	env->len_version = (unsigned int)strlen(env->version);
-	verbose(VERB_OPS, "dnstap version field set to \"%s\"",
-		env->version);
-}
+uint8_t
+__dt_so_connect(dt_env_t *env, struct sockaddr_in so_service) {
+	while(1) {
+		if(*(env->dt_stopping)) return 0;
 
-void
-dt_apply_cfg(struct dt_env *env, struct config_file *cfg)
-{
-	if (!cfg->dnstap)
-		return;
+		verbose(VERB_OPS, "dnstap: trying to connect to %s:%d", "127.0.0.1", 5354);
+		if((env->so_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+			verbose(VERB_OPS, "dnstap: error creating socket: %s", strerror(errno));
+			return 0;
+		}
 
-	dt_apply_identity(env, cfg);
-	dt_apply_version(env, cfg);
-	if ((env->log_resolver_query_messages = (unsigned int)
-	     cfg->dnstap_log_resolver_query_messages))
-	{
-		verbose(VERB_OPS, "dnstap Message/RESOLVER_QUERY enabled");
-	}
-	if ((env->log_resolver_response_messages = (unsigned int)
-	     cfg->dnstap_log_resolver_response_messages))
-	{
-		verbose(VERB_OPS, "dnstap Message/RESOLVER_RESPONSE enabled");
-	}
-	if ((env->log_client_query_messages = (unsigned int)
-	     cfg->dnstap_log_client_query_messages))
-	{
-		verbose(VERB_OPS, "dnstap Message/CLIENT_QUERY enabled");
-	}
-	if ((env->log_client_response_messages = (unsigned int)
-	     cfg->dnstap_log_client_response_messages))
-	{
-		verbose(VERB_OPS, "dnstap Message/CLIENT_RESPONSE enabled");
-	}
-	if ((env->log_forwarder_query_messages = (unsigned int)
-	     cfg->dnstap_log_forwarder_query_messages))
-	{
-		verbose(VERB_OPS, "dnstap Message/FORWARDER_QUERY enabled");
-	}
-	if ((env->log_forwarder_response_messages = (unsigned int)
-	     cfg->dnstap_log_forwarder_response_messages))
-	{
-		verbose(VERB_OPS, "dnstap Message/FORWARDER_RESPONSE enabled");
-	}
-}
+		if(connect(env->so_socket, (struct sockaddr *) &so_service, sizeof so_service) > -1) break;
+		verbose(VERB_OPS, "dnstap: error connecting to socket: %s", strerror(errno));
 
-int
-dt_init(struct dt_env *env)
-{
-	// env->ioq = fstrm_iothr_get_input_queue(env->iothr);
-	// if (env->ioq == NULL)
-	// 	return 0;
+		// Try again in 5 seconds
+		close(env->so_socket);
+		sleep(5);
+	}
+
+	*(env->so_connected) = 1;
+	verbose(VERB_OPS, "dnstap: connected to %s:%d", "127.0.0.1", 5354);
 	return 1;
 }
 
 void
-dt_delete(struct dt_env *env)
+dt_apply_cfg(dt_env_t *env, struct config_file *cfg)
 {
-	if (!env)
-		return;
-	verbose(VERB_OPS, "closing dnstap socket");
-	// fstrm_iothr_destroy(&env->iothr);
+	if (!cfg->dnstap) return;
+
+	if (cfg->dnstap_send_identity) {
+		free(env->identity);
+		env->identity = strdup(cfg->identity);
+		env->len_identity = (uint16_t) strlen(env->identity);
+		verbose(VERB_OPS, "dnstap: identity field set to \"%s\"", env->identity);
+	}
+
+	if (cfg->dnstap_send_version) {
+		free(env->version);
+		env->version = strdup(cfg->version);
+		env->len_version = (uint16_t) strlen(env->version);
+		verbose(VERB_OPS, "dnstap: version field set to \"%s\"", env->version);
+	}
+
+	if ((env->log_resolver_query_messages = (uint8_t) cfg->dnstap_log_resolver_query_messages))
+			verbose(VERB_OPS, "dnstap: Message/RESOLVER_QUERY enabled");
+
+	if ((env->log_resolver_response_messages = (uint8_t) cfg->dnstap_log_resolver_response_messages))
+			verbose(VERB_OPS, "dnstap: Message/RESOLVER_RESPONSE enabled");
+
+	if ((env->log_client_query_messages = (uint8_t) cfg->dnstap_log_client_query_messages))
+			verbose(VERB_OPS, "dnstap: Message/CLIENT_QUERY enabled");
+
+	if ((env->log_client_response_messages = (uint8_t) cfg->dnstap_log_client_response_messages))
+			verbose(VERB_OPS, "dnstap: Message/CLIENT_RESPONSE enabled");
+
+	if ((env->log_forwarder_query_messages = (uint8_t) cfg->dnstap_log_forwarder_query_messages))
+			verbose(VERB_OPS, "dnstap: Message/FORWARDER_QUERY enabled");
+
+	if ((env->log_forwarder_response_messages = (uint8_t) cfg->dnstap_log_forwarder_response_messages))
+			verbose(VERB_OPS, "dnstap: Message/FORWARDER_RESPONSE enabled");
+}
+
+int
+dt_init(dt_env_t *env)
+{
+	env->so_producer = pipe_producer_new(env->so_pipe);
+	return 1;
+}
+
+void
+dt_delete(dt_env_t *env)
+{
+	if (!env) return;
+	verbose(VERB_OPS, "cleanup dnstap environment");
+
 	free(env->identity);
 	free(env->version);
+
+	// Wait for all unbound_workers' producers to drain
+	*(env->dt_stopping) = 1;
+
+	pipe_producer_free(env->so_producer);
+	pthread_join(env->dt_worker, NULL);
 	free(env);
 }
 
@@ -288,7 +289,7 @@ dt_fill_buffer(sldns_buffer *b, ProtobufCBinaryData *p, protobuf_c_boolean *has)
 }
 
 static void
-dt_msg_fill_net(struct dt_msg *dm,
+dt_msg_fill_net(dt_msg_t *dm,
 		struct sockaddr_storage *ss,
 		enum comm_point_type cptype,
 		ProtobufCBinaryData *addr, protobuf_c_boolean *has_addr,
@@ -340,12 +341,12 @@ dt_msg_fill_net(struct dt_msg *dm,
 }
 
 void
-dt_msg_send_client_query(struct dt_env *env,
-			 struct sockaddr_storage *qsock,
-			 enum comm_point_type cptype,
-			 sldns_buffer *qmsg)
+dt_msg_send_client_query(dt_env_t *env,
+	struct sockaddr_storage *qsock,
+	enum comm_point_type cptype,
+	sldns_buffer *qmsg)
 {
-	struct dt_msg dm;
+	dt_msg_t dm;
 	struct timeval qtime;
 
 	gettimeofday(&qtime, NULL);
@@ -355,8 +356,8 @@ dt_msg_send_client_query(struct dt_env *env,
 
 	/* query_time */
 	dt_fill_timeval(&qtime,
-			&dm.m.query_time_sec, &dm.m.has_query_time_sec,
-			&dm.m.query_time_nsec, &dm.m.has_query_time_nsec);
+		&dm.m.query_time_sec, &dm.m.has_query_time_sec,
+		&dm.m.query_time_nsec, &dm.m.has_query_time_nsec);
 
 	/* query_message */
 	dt_fill_buffer(qmsg, &dm.m.query_message, &dm.m.has_query_message);
@@ -364,20 +365,20 @@ dt_msg_send_client_query(struct dt_env *env,
 	/* socket_family, socket_protocol, query_address, query_port */
 	log_assert(cptype == comm_udp || cptype == comm_tcp);
 	dt_msg_fill_net(&dm, qsock, cptype,
-			&dm.m.query_address, &dm.m.has_query_address,
-			&dm.m.query_port, &dm.m.has_query_port);
+		&dm.m.query_address, &dm.m.has_query_address,
+		&dm.m.query_port, &dm.m.has_query_port);
 
 	if (dt_pack(&dm.d, &dm.buf, &dm.len_buf))
 		dt_send(env, dm.buf, dm.len_buf);
 }
 
 void
-dt_msg_send_client_response(struct dt_env *env,
+dt_msg_send_client_response(dt_env_t *env,
 			    struct sockaddr_storage *qsock,
 			    enum comm_point_type cptype,
 			    sldns_buffer *rmsg)
 {
-	struct dt_msg dm;
+	dt_msg_t dm;
 	struct timeval rtime;
 
 	gettimeofday(&rtime, NULL);
@@ -404,13 +405,13 @@ dt_msg_send_client_response(struct dt_env *env,
 }
 
 void
-dt_msg_send_outside_query(struct dt_env *env,
+dt_msg_send_outside_query(dt_env_t *env,
 			  struct sockaddr_storage *rsock,
 			  enum comm_point_type cptype,
 			  uint8_t *zone, size_t zone_len,
 			  sldns_buffer *qmsg)
 {
-	struct dt_msg dm;
+	dt_msg_t dm;
 	struct timeval qtime;
 	uint16_t qflags;
 
@@ -452,16 +453,16 @@ dt_msg_send_outside_query(struct dt_env *env,
 }
 
 void
-dt_msg_send_outside_response(struct dt_env *env,
-			     struct sockaddr_storage *rsock,
-			     enum comm_point_type cptype,
-			     uint8_t *zone, size_t zone_len,
-			     uint8_t *qbuf, size_t qbuf_len,
-			     const struct timeval *qtime,
-			     const struct timeval *rtime,
-			     sldns_buffer *rmsg)
+dt_msg_send_outside_response(dt_env_t *env,
+	struct sockaddr_storage *rsock,
+	enum comm_point_type cptype,
+	uint8_t *zone, size_t zone_len,
+	uint8_t *qbuf, size_t qbuf_len,
+	const struct timeval *qtime,
+	const struct timeval *rtime,
+	sldns_buffer *rmsg)
 {
-	struct dt_msg dm;
+	dt_msg_t dm;
 	uint16_t qflags;
 
 	log_assert(qbuf_len >= sizeof(qflags));

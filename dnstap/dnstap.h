@@ -36,46 +36,54 @@
 #define UNBOUND_DNSTAP_H
 
 #include "dnstap/dnstap_config.h"
+#include "dnstap/dnstap.pb-c.h"
+#include "dnstap/pipe.h"
+#include <pthread.h>
 
 #ifdef USE_DNSTAP
 
 struct config_file;
-// struct fstrm_io;
-// struct fstrm_queue;
 struct sldns_buffer;
+#define DNSTAP_INITIAL_BUF_SIZE 256
 
-struct dt_env {
-	/** dnstap I/O thread */
-	// struct fstrm_iothr *iothr;
+typedef struct dt_msg {
+	void *buf;
+	size_t len_buf;
+	Dnstap__Dnstap d;
+	Dnstap__Message m;
+} dt_msg_t;
 
-	/** dnstap I/O thread input queue */
-	// struct fstrm_iothr_queue *ioq;
+typedef struct dt_message {
+	uint16_t length;
+	void *buffer;
+} dt_message_t;
 
-	/** dnstap "identity" field, NULL if disabled */
-	char *identity;
+#define dt_message_size(MSG) sizeof(uint16_t) + MSG->length
+#define dt_message_alloc(LENGTH) malloc(sizeof(uint16_t) + LENGTH)
+#define dt_message_free(MSG) free(MSG->buffer); free(MSG)
 
-	/** dnstap "version" field, NULL if disabled */
-	char *version;
+typedef struct dt_env {
+	uint16_t len_identity;
+	uint8_t *identity;
+	uint16_t len_version;
+	uint8_t *version;
 
-	/** length of "identity" field */
-	unsigned len_identity;
+	pipe_t *so_pipe;
+	pipe_producer_t *so_producer;
+	pipe_consumer_t *so_consumer;
+	pthread_t dt_worker;
 
-	/** length of "version" field */
-	unsigned len_version;
+	int so_socket;
+	uint8_t *so_connected;
+	uint8_t *dt_stopping;
 
-	/** whether to log Message/RESOLVER_QUERY */
-	unsigned log_resolver_query_messages : 1;
-	/** whether to log Message/RESOLVER_RESPONSE */
-	unsigned log_resolver_response_messages : 1;
-	/** whether to log Message/CLIENT_QUERY */
-	unsigned log_client_query_messages : 1;
-	/** whether to log Message/CLIENT_RESPONSE */
-	unsigned log_client_response_messages : 1;
-	/** whether to log Message/FORWARDER_QUERY */
-	unsigned log_forwarder_query_messages : 1;
-	/** whether to log Message/FORWARDER_RESPONSE */
-	unsigned log_forwarder_response_messages : 1;
-};
+	uint8_t log_resolver_query_messages			: 1;
+	uint8_t log_resolver_response_messages	: 1;
+	uint8_t log_client_query_messages				: 1;
+	uint8_t log_client_response_messages		: 1;
+	uint8_t log_forwarder_query_messages		: 1;
+	uint8_t log_forwarder_response_messages	: 1;
+} dt_env_t;
 
 /**
  * Create dnstap environment object. Afterwards, call dt_apply_cfg() to fill in
@@ -88,8 +96,8 @@ struct dt_env {
  * @param num_workers: number of worker threads, must be > 0.
  * @return dt_env object, NULL on failure.
  */
-struct dt_env *
-dt_create(const char *socket_path, unsigned num_workers);
+dt_env_t *
+dt_create(uint16_t port, uint8_t num_workers);
 
 /**
  * Apply config settings.
@@ -97,7 +105,7 @@ dt_create(const char *socket_path, unsigned num_workers);
  * @param cfg: new config settings.
  */
 void
-dt_apply_cfg(struct dt_env *env, struct config_file *cfg);
+dt_apply_cfg(dt_env_t *env, struct config_file *cfg);
 
 /**
  * Initialize per-worker state in dnstap environment object.
@@ -105,14 +113,23 @@ dt_apply_cfg(struct dt_env *env, struct config_file *cfg);
  * @return: true on success, false on failure.
  */
 int
-dt_init(struct dt_env *env);
+dt_init(dt_env_t *env);
 
 /**
  * Delete dnstap environment object. Closes dnstap I/O socket and deletes all
  * per-worker I/O queues.
  */
 void
-dt_delete(struct dt_env *env);
+dt_delete(dt_env_t *env);
+
+/**
+ * Worker for writing DNSTap mesasges to a socket
+ */
+void *
+__dt_worker(void *);
+
+uint8_t
+__dt_so_connect(dt_env_t *env, struct sockaddr_in so_service);
 
 /**
  * Create and send a new dnstap "Message" event of type CLIENT_QUERY.
@@ -122,10 +139,10 @@ dt_delete(struct dt_env *env);
  * @param qmsg: query message.
  */
 void
-dt_msg_send_client_query(struct dt_env *env,
-			 struct sockaddr_storage *qsock,
-			 enum comm_point_type cptype,
-			 struct sldns_buffer *qmsg);
+dt_msg_send_client_query(dt_env_t *env,
+	struct sockaddr_storage *qsock,
+	enum comm_point_type cptype,
+	struct sldns_buffer *qmsg);
 
 /**
  * Create and send a new dnstap "Message" event of type CLIENT_RESPONSE.
@@ -135,10 +152,10 @@ dt_msg_send_client_query(struct dt_env *env,
  * @param rmsg: response message.
  */
 void
-dt_msg_send_client_response(struct dt_env *env,
-			    struct sockaddr_storage *qsock,
-			    enum comm_point_type cptype,
-			    struct sldns_buffer *rmsg);
+dt_msg_send_client_response(dt_env_t *env,
+	struct sockaddr_storage *qsock,
+	enum comm_point_type cptype,
+	struct sldns_buffer *rmsg);
 
 /**
  * Create and send a new dnstap "Message" event of type RESOLVER_QUERY or
@@ -152,11 +169,11 @@ dt_msg_send_client_response(struct dt_env *env,
  * @param qmsg: query message.
  */
 void
-dt_msg_send_outside_query(struct dt_env *env,
-			  struct sockaddr_storage *rsock,
-			  enum comm_point_type cptype,
-			  uint8_t *zone, size_t zone_len,
-			  struct sldns_buffer *qmsg);
+dt_msg_send_outside_query(dt_env_t *env,
+	struct sockaddr_storage *rsock,
+	enum comm_point_type cptype,
+	uint8_t *zone, size_t zone_len,
+	struct sldns_buffer *qmsg);
 
 /**
  * Create and send a new dnstap "Message" event of type RESOLVER_RESPONSE or
@@ -174,15 +191,14 @@ dt_msg_send_outside_query(struct dt_env *env,
  * @param rmsg: response message.
  */
 void
-dt_msg_send_outside_response(struct dt_env *env,
-			     struct sockaddr_storage *rsock,
-			     enum comm_point_type cptype,
-			     uint8_t *zone, size_t zone_len,
-			     uint8_t *qbuf, size_t qbuf_len,
-			     const struct timeval *qtime,
-			     const struct timeval *rtime,
-			     struct sldns_buffer *rmsg);
+dt_msg_send_outside_response(dt_env_t *env,
+	struct sockaddr_storage *rsock,
+	enum comm_point_type cptype,
+	uint8_t *zone, size_t zone_len,
+	uint8_t *qbuf, size_t qbuf_len,
+	const struct timeval *qtime,
+	const struct timeval *rtime,
+	struct sldns_buffer *rmsg);
 
 #endif /* USE_DNSTAP */
-
 #endif /* UNBOUND_DNSTAP_H */
