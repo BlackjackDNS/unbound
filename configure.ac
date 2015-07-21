@@ -84,7 +84,7 @@ AC_SUBST(LIBUNBOUND_CURRENT)
 AC_SUBST(LIBUNBOUND_REVISION)
 AC_SUBST(LIBUNBOUND_AGE)
 
-CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -std=c99"
 AC_AIX
 if test "$ac_cv_header_minix_config_h" = "yes"; then
 	AC_DEFINE(_NETBSD_SOURCE,1, [Enable for compile on Minix])
